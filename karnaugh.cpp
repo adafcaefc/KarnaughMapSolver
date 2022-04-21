@@ -246,7 +246,11 @@ namespace karnaugh
         }
     }
 
-    // ...
+    // get all groups with the same value from the map
+    // this can be done by checking for every single submatrix
+    // that is present using the patterns defined above
+    // if all value of the matrix is the same it will be included
+    // into the result
     std::vector<kgroup> kmap::get_all_groups(const bool v) const
     {
         std::vector<kgroup> result;
