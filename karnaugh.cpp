@@ -34,10 +34,21 @@ namespace karnaugh
         // x x x x      x
         // 
         // we will denote them by the x and y sizes
-        static const std::vector<ivec2> patterns =
+        // max_size is inclusive
+        std::vector<ivec2> get_patterns(const ivec2& max_size)
         {
-            { 1, 1 }, { 2, 1 }, { 1, 2 }, { 4, 1 }, { 1, 4 }, { 2, 2 }, { 4, 2 }, { 2, 4 }, { 4, 4 }
-        };
+            std::vector<ivec2> result;
+            for (int x = 1; x <= max_size.x; x = x << 1)
+            {
+                for (int y = 1; y <= max_size.y; y = y << 1)
+                {
+                    result.emplace_back(x, y);
+                }
+            }
+            return result;
+        }
+        // we will cache this for optimisation
+        static const std::vector<ivec2> patterns = get_patterns(ivec2(4, 4));
 
         // generates an empty map from the key list
         template<typename T_map, typename T_iter>
@@ -50,7 +61,7 @@ namespace karnaugh
 
         // generate karnaugh order (size = 2 : 00, 01, 11, 10)
         // this is hardcoded due to the fact that size 3+ requires a different set of order for A and B 
-        // 6 variables K-map is not implemented yet as of now
+        // 5+ variables K-map is not implemented yet as of now
         std::vector<std::vector<int>> generate_order(const size_t size)
         {
             switch (size)
@@ -83,7 +94,7 @@ namespace karnaugh
         {
             for (int y = 0; y < this->size.y; ++y)
             {
-                result.push_back(ivec2(this->start.x + x, this->start.y + y));
+                result.emplace_back(this->start.x + x, this->start.y + y);
             }
         }
         return result;
@@ -103,7 +114,7 @@ namespace karnaugh
 
     // loads the variable state of a certain x, y point on the map
     // returns nullptr if it cannot find the correct item
-    const var_coord_t* kmap::var_coord_for(const int x, const int y) const
+    const kmap::var_coord_t* kmap::var_coord_for(const int x, const int y) const
     {
         for (auto& [k, v] : this->internal_map)
         {
@@ -115,7 +126,7 @@ namespace karnaugh
 
     // loads the variable state of a certain x point on the map
     // returns nullptr if it cannot find the correct item
-    const var_map_t* kmap::var_map_for_x(const int x) const
+    const kmap::var_map_t* kmap::var_map_for_x(const int x) const
     {
         for (auto& [k, v] : this->internal_map)
         {
@@ -127,7 +138,7 @@ namespace karnaugh
 
     // loads the variable state of a certain y point on the map
     // returns nullptr if it cannot find the correct item
-    const var_map_t* kmap::var_map_for_y(const int y) const
+    const kmap::var_map_t* kmap::var_map_for_y(const int y) const
     {
         for (auto& [k, v] : this->internal_map)
         {
@@ -149,7 +160,7 @@ namespace karnaugh
         std::vector<char> tvariables;
         std::pair<var_map_t, var_map_t> tmap;
         char temp = 0;
-        while (iss >> temp) { tvariables.push_back(temp); }
+        while (iss >> temp) { tvariables.emplace_back(temp); }
 
         // we will put them in a temporary map to deduce the order
         const auto s = tvariables.size();
@@ -165,12 +176,12 @@ namespace karnaugh
 
         for (auto& [k, v] : tmap.first)
         {
-            this->variables.first.push_back(k);
+            this->variables.first.emplace_back(k);
         }
 
         for (auto& [k, v] : tmap.second)
         {
-            this->variables.second.push_back(k);
+            this->variables.second.emplace_back(k);
         }
 
         this->unordered_variables = tvariables;
@@ -186,7 +197,7 @@ namespace karnaugh
     {
         int temp = 0;
         std::vector<int> result;
-        while (iss >> temp) { result.push_back(temp); }
+        while (iss >> temp) { result.emplace_back(temp); }
 
         const auto process = [this](const var_list_t& list, const std::vector<int>& vars) -> var_pmap_t
         {
@@ -201,7 +212,7 @@ namespace karnaugh
             const auto order = utils::generate_order(temp.size());
 
             std::vector<int> current_vmap;
-            for (auto& [k, v] : temp) { current_vmap.push_back(v); }
+            for (auto& [k, v] : temp) { current_vmap.emplace_back(v); }
 
             int position = 0;
             for (auto i = 0u; i < order.size(); ++i)
@@ -223,6 +234,12 @@ namespace karnaugh
     }
 
     // load the map from a path
+    // map file will always look like this
+    // A B C   <--- first line will always contain the variable name
+    // 0 0 0 0 <--- this means the value for A = 0, B = 0, C = 0 is 0
+    // 0 0 1 1 <--- this means the value for A = 0, B = 0, C = 1 is 1
+    // ...
+    // the file can have variying amount of variables
     kmap::kmap(const std::filesystem::path& path)
     {
         if (!std::filesystem::exists(path)) { return; }
@@ -234,10 +251,10 @@ namespace karnaugh
         while (std::getline(in, line))
         {
             std::istringstream iss(line);
+            // the first line contains the variable name
+            // this will only be run once
             if (!load_variable)
             {
-                // the first line contains the variable name
-                // this will only be run once
                 this->load_variables(iss);
                 load_variable = true;
                 continue;
@@ -261,7 +278,7 @@ namespace karnaugh
                 for (int y = 0; y < static_cast<int>(this->size_y()) - mask.y + 1; ++y)
                 {
                     kgroup current(ivec2(x, y), mask);
-                    if (this->check_group(current, v)) { result.push_back(current); }
+                    if (this->check_group(current, v)) { result.emplace_back(current); }
                 }
             }
         }
@@ -269,6 +286,11 @@ namespace karnaugh
     }
 
     // this will filter duplicate groups, done in two pass
+    // note : I am considering to completely skip the first pass
+    //        as it is not mandatory, but I thought that it might
+    //        improve the performance significantly in some cases
+    //        although after careful thinking I doubt that this
+    //        is the case for most cases
     std::vector<kgroup> kmap::get_filtered_groups(const bool v) const
     {
         std::vector<kgroup> result;
@@ -290,7 +312,7 @@ namespace karnaugh
             {
                 if (g.is_in(b) && &g != &b) { is_in = true; break; }
             }
-            if (!is_in) { result.push_back(g); }
+            if (!is_in) { result.emplace_back(g); }
         }
 
         // second pass removes group whose members are found in other groups
@@ -332,7 +354,7 @@ namespace karnaugh
                         is_not_in = false;
                     }
                 }
-                if (is_not_in) { result.push_back(g); break; }
+                if (is_not_in) { result.emplace_back(g); break; }
             }
         }
 
@@ -358,7 +380,7 @@ namespace karnaugh
 
     // returns a list of coordinates from a kgroup
     // this loops through all the coordinates in a specific group
-    std::vector<var_coord_t const*> kmap::coords_from_kgroup(const kgroup& group) const
+    std::vector<kmap::var_coord_t const*> kmap::coords_from_kgroup(const kgroup& group) const
     {
         std::vector<var_coord_t const*> result;
         for (auto i = group.start.x; i < group.start.x + group.size.x; ++i)
@@ -366,7 +388,7 @@ namespace karnaugh
             for (auto j = group.start.y; j < group.start.y + group.size.y; ++j)
             {
                 auto fv = this->var_coord_for(i, j);
-                if (fv) { result.push_back(fv); }
+                if (fv) { result.emplace_back(fv); }
             }
         }
         return result;
@@ -384,9 +406,9 @@ namespace karnaugh
             std::stringstream ssn;
             for (auto& [k, vv] : m)
             {
-                if (!ssn.str().empty() && vv != karnaugh::k_var_result::k_vnull) { ssn << ' ' << (!v ? '+' : 'x') << ' '; }
-                if (vv == karnaugh::k_var_result::k_vfalse) { ssn << '!'; }
-                if (vv != karnaugh::k_var_result::k_vnull) { ssn << k; }
+                if (!ssn.str().empty() && vv != karnaugh::kmap::k_var_result::k_vnull) { ssn << ' ' << (!v ? '+' : 'x') << ' '; }
+                if (vv == karnaugh::kmap::k_var_result::k_vfalse) { ssn << '!'; }
+                if (vv != karnaugh::kmap::k_var_result::k_vnull) { ssn << k; }
             }
             ss << '(' << ssn.str() << ')';
         }
@@ -398,7 +420,7 @@ namespace karnaugh
     // constant variables
     // if it does, it will compare it to the actual
     // value of the cell
-    std::vector<std::map<char, k_var_result>> kmap::get_formula(const bool v) const
+    std::vector<std::map<char, kmap::k_var_result>> kmap::get_formula(const bool v) const
     {
         std::vector<std::map<char, k_var_result>> result;
         for (auto& g : this->get_filtered_groups(v))
@@ -424,7 +446,7 @@ namespace karnaugh
                 if (is_different || !cvalue || !value) { map.at(var) = k_var_result::k_vnull; }
                 else { map.at(var) = (*value == *cvalue) ? k_var_result::k_vtrue : k_var_result::k_vfalse; }
             }
-            result.push_back(map);
+            result.emplace_back(map);
         }
         return result;
     }
