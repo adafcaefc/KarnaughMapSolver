@@ -86,7 +86,7 @@ namespace karnaugh
             (this->start.y + this->size.y <= group.start.y + group.size.y);
     }
     
-    // check whether a kgroup is inside another group
+    // convert a kgroup into points
     std::vector<ivec2> kgroup::to_points() const
     {
         std::vector<ivec2> result;
